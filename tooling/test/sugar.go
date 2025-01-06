@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/ipfs/gateway-conformance/tooling"
@@ -159,6 +162,34 @@ func ResponsesAreEqual() ExpectBuilder {
 
 func (e ExpectBuilder) Status(statusCode int) ExpectBuilder {
 	e.StatusCode_ = statusCode
+	return e
+}
+
+func (e ExpectBuilder) StatusMatch(pattern string) ExpectBuilder {
+	re := regexp.MustCompile(`^(\d+)(x+)$`)
+	matches := re.FindStringSubmatch(pattern)
+	if len(matches) != 3 {
+		panic("invalid status pattern")
+	}
+
+	// Extract the leading digits and the number of 'x' characters
+	leadingDigits := matches[1]
+	numXs := len(matches[2])
+
+	// Compute the lower bound
+	from, err := strconv.Atoi(leadingDigits + strings.Repeat("0", numXs))
+	if err != nil {
+		panic(fmt.Sprintf("invalid status pattern: %v", err))
+	}
+
+	// Compute the upper bound
+	to, err := strconv.Atoi(leadingDigits + strings.Repeat("9", numXs))
+	if err != nil {
+		panic(fmt.Sprintf("invalid status pattern: %v", err))
+	}
+
+	e.StatusCodeFrom_ = from
+	e.StatusCodeTo_ = to
 	return e
 }
 
