@@ -531,6 +531,10 @@ func TestGatewayUnixFSFileRanges(t *testing.T) {
 
 	tests := SugarTests{}
 
+	// Wer use contentType from the smoke-test above to determine which
+	// range tests should be executed.
+	// TODO: move range requests to own 'spec' so they can be enabled/disabled
+	// similar to proxy-gateway feature
 	if strings.Contains(contentType, "text/plain") {
 		// The server is not able to respond to a multi-range request. Therefore,
 		// there might be only one range or... just the whole file, depending on the headers.
@@ -594,6 +598,36 @@ func TestGatewayUnixFSFileRanges(t *testing.T) {
 		})
 	} else {
 		t.Error("Content-Type header did not match any of the accepted options")
+	}
+
+	// If gateway supports Range requests
+	// Run the Range rest against the file-3k-and-3-blocks-missing-block.car
+	// special fixture from ?format=car&entity-bytes test.
+	if contentRange != "" || strings.Contains(contentType, "multipart/byteranges") {
+		missingBlockFixture := car.MustOpenUnixfsCar("trustless_gateway_car/file-3k-and-3-blocks-missing-block.car")
+
+		tests = append(tests, SugarTest{
+			Name: "GET Range of file succeeds even if the gateway is missing a block after the requested range",
+			Hint: "This MUST succeed despite the fact that bytes beyond the end of range are not retrievable",
+			Request: Request().
+				Path("/ipfs/{{cid}}", missingBlockFixture.MustGetCidWithCodec(0x70)).
+				Headers(
+					Header("Range", "bytes=0-1000"),
+				),
+			Response: Expect().
+				Status(206).
+				Headers(
+					// TODO: fix HTTP 500: cannot detect content-type: failed to fetch all nodes i boxo/gateway (or create better fixture that does not clash with content-type sniffing logic)
+					Header("Content-Type").Contains("text/plain"),
+					Header("Content-Range").Equals("bytes 0-1000/31"),
+				),
+			// TODO: we are missing helper for returning byte range from a
+			// CAR. the fixture here is multi-block, and we can use
+			// missingBlockFixture.MustGetRawData because raw data spans
+			// across more than one block.
+		},
+		// TODO: port test fror range AFTER missing block as well
+		)
 	}
 
 	RunWithSpecs(t, tests, specs.PathGatewayUnixFS)
